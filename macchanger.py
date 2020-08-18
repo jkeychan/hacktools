@@ -31,7 +31,7 @@ def get_arguments():
 
 def get_current_mac(interface):
     ifconfig_result = subprocess.check_output(["ifconfig", options.interface])
-    mac_address_search_result = re.search(r"\w\w:\w\w:\w\w:\w\w:\w\w:\w\w", ifconfig_result)
+    mac_address_search_result = re.search(rb"\w\w:\w\w:\w\w:\w\w:\w\w:\w\w", ifconfig_result)
 
     if mac_address_search_result:
         return mac_address_search_result.group(0)
@@ -41,13 +41,16 @@ def get_current_mac(interface):
 
 def change_mac(interface, new_mac):
     current_mac = get_current_mac(options.interface)
-    print("\nChanging MAC address from " + current_mac + " to " + new_mac + " ...\n")
+    print("\nChanging MAC address from " + str(current_mac) + " to " + new_mac + " ...\n")
     subprocess.call(["ifconfig", interface, "down"])
     subprocess.call(["ifconfig", interface, "hw", "ether", new_mac])
     print("\nBringing " + interface + " back up now... \n")
     time.sleep(2)
     subprocess.call(["ifconfig", interface, "up"])
-
+    if current_mac == new_mac:
+        print("[+] MAC address was successfully changed to " + new_mac)
+    else:
+        print("[-] MAC address did not change. Please try again.\n")
 
 # Runs the get_arguments function and returns values to pass to the next function to initialize options and arguments
 (options) = get_arguments()
@@ -57,9 +60,11 @@ current_mac = get_current_mac(options.interface)
 
 # User interaction
 
-print("\n [+] Original MAC address of " + options.interface + " is: " + str(current_mac))
+# UTF-8 decode here to prevent errors with str conversion
+
+print("\n [+] Original MAC address of " + options.interface + " is: " + b'current_mac'.decode())
 print("\n WARNING - This will restart your network interface and you might temporarily lose connectivity \n")
-answer = input("\n Change MAC address to " + options.new_mac + " (y/N) ?  \n")
+answer = input("\n Change MAC address to " + str(options.new_mac) + " (y/N) ?  \n")
 
 # Use regex from re to ensure only Y or N can be accepted, else restart the program. If N, then exit
 
