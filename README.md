@@ -1,3 +1,5 @@
+# Hacktools
+This repo is a collection of simple python tools and scripts for reconnaissance, attack, and exploit techniques.
 # MAC Changer
 This tool is designed to allow changing the MAC address of a network interface on any system with the `ifconfig` utility.
 
