@@ -1,78 +1,87 @@
 #!/usr/bin/env python3
 
-# subprocess for the shell commands like ifconfig
-# optparse for the command line help and arguments
-# sys.exit for a clean ending and restarting the program in the loop
-# re for the regular expressions and matching in MAC address and user answers
-# time for basic sleep after restarting the network interface
-
 import subprocess
-import optparse
-import sys
-import os
 import re
+import sys
 import time
+import argparse
+import platform
 
 
 def get_arguments():
-    # Add command line argument support/help for user inputs (network interface and new MAC address)
-    # This is the optparse stuff
+    parser = argparse.ArgumentParser(description="MAC Address Changer Tool",
+                                     usage="macchanger.py -i <interface> -m <MAC_address>")
+    parser.add_argument("-i", "--interface", dest="interface",
+                        required=True, help="Interface to change. (Required)")
+    parser.add_argument("-m", "--mac", dest="new_mac", required=True,
+                        help="New MAC Address in format XX:XX:XX:XX:XX:XX. (Required)")
+    return parser.parse_args()
 
-    cli_parser = optparse.OptionParser()
-    cli_parser.add_option("-i", "--interface", dest="interface", help="Interface to change.")
-    cli_parser.add_option("-m", "--mac", dest="new_mac", help="New MAC Address.")
-    (options, arguments) = cli_parser.parse_args()
-    if not options.interface:  # if not True (value not set) then...
-        cli_parser.error('[-] Please specify an interface name (ex. eth0), use --help for more info')
-    elif not options.new_mac:
-        cli_parser.error('[-] Please specify an MAC Address (ex. d6:1a:dd:85:2a:f9), use --help for more info')
-    return options
+
+def validate_mac(mac_address):
+    if re.match(r"^([0-9A-Fa-f]{2}:){5}[0-9A-Fa-f]{2}$", mac_address):
+        return True
+    else:
+        print("[-] Invalid MAC address format. Ensure it's in format XX:XX:XX:XX:XX:XX")
+        sys.exit(1)
 
 
 def get_current_mac(interface):
-    ifconfig_result = subprocess.check_output(["ifconfig", options.interface])
-    mac_address_search_result = re.search(rb"\w\w:\w\w:\w\w:\w\w:\w\w:\w\w", ifconfig_result)
+    try:
+        ifconfig_result = subprocess.check_output(
+            ["ifconfig", interface]).decode()
+        mac_address_search_result = re.search(
+            r"\w\w:\w\w:\w\w:\w\w:\w\w:\w\w", ifconfig_result)
+        if mac_address_search_result:
+            return mac_address_search_result.group(0)
+        else:
+            print("[-] Could not read MAC address.")
+            sys.exit(1)
+    except subprocess.CalledProcessError:
+        print(
+            f"[-] Could not get details for {interface}. Ensure the interface name is correct.")
+        sys.exit(1)
 
-    if mac_address_search_result:
-        # The .decode here fixes the problem of showing b' in the string
-        return mac_address_search_result.group(0).decode()
-    else:
-        print("[-] Could not read MAC address.")
 
+def change_mac(interface, new_mac, current_mac):
+    print(f"\nChanging MAC address from {current_mac} to {new_mac} ...\n")
+    try:
+        if platform.system() == "Linux":
+            subprocess.call(["sudo", "ifconfig", interface, "down"])
+            subprocess.call(
+                ["sudo", "ifconfig", interface, "hw", "ether", new_mac])
+            subprocess.call(["sudo", "ifconfig", interface, "up"])
+        elif platform.system() == "Darwin":  # Darwin indicates macOS
+            subprocess.call(["sudo", "ifconfig", interface, "ether", new_mac])
+            subprocess.call(["sudo", "ifconfig", interface, "up"])
+        else:
+            print("[-] Unsupported Operating System.")
+            sys.exit(1)
+    except subprocess.CalledProcessError:
+        print(f"[-] Failed to change MAC address for {interface}.")
+        sys.exit(1)
 
-def change_mac(interface, new_mac):
-    print("\nChanging MAC address from " + current_mac + " to " + new_mac + " ...\n")
-    subprocess.call(["ifconfig", interface, "down"])
-    subprocess.call(["ifconfig", interface, "hw", "ether", new_mac])
-    print("\nBringing " + interface + " back up now...")
-    time.sleep(1)
-    subprocess.call(["ifconfig", interface, "up"])
     if get_current_mac(interface) == new_mac:
-        print("\n[+] MAC address was successfully changed to " + new_mac)
+        print(f"\n[+] MAC address was successfully changed to {new_mac}")
     else:
         print("[-] MAC address did not change. Please try again.\n")
 
-# Runs the get_arguments function and returns values to pass to the next function to initialize options and arguments
-options = get_arguments()
 
-# Brings current_mac out of the function for others to use
-current_mac = get_current_mac(options.interface)
+if __name__ == '__main__':
+    options = get_arguments()
 
-# User interaction
+    if validate_mac(options.new_mac):
+        current_mac = get_current_mac(options.interface)
+        print(
+            f"\n[+] The current MAC address of {options.interface} is: {current_mac}")
+        print("\n WARNING - This may restart your network interface and you might temporarily lose connectivity.\n")
+        answer = input(f"Change MAC address to {options.new_mac} (y/n)? ")
 
-print("\n [+] The current MAC address of " + options.interface + " is: " + current_mac)
-print("\n WARNING - This will restart your network interface and you might temporarily lose connectivity \n")
-answer = input("\n Change MAC address to " + str(options.new_mac) + " (y/n) ?  \n")
-
-# Use regex from re to ensure only Y or N can be accepted, else restart the program. If N, then exit
-
-if not re.match(r"[Yy]|[Nn]", answer):
-    print("Invalid input. Please enter 'y' or 'n' \n")
-    os.execl(sys.executable, sys.executable, *sys.argv)  # restarts the whole program on bad input
-
-elif re.match(r"[Yy]", answer):
-    change_mac(options.interface, options.new_mac)  # custom function change_mac to simplify readability
-
-else:
-    print("Nevermind. Exiting... \n")
-    sys.exit()
+        if answer.lower() not in ['y', 'n']:
+            print("Invalid input. Please enter 'y' or 'n'.")
+            sys.exit(1)
+        elif answer.lower() == 'y':
+            change_mac(options.interface, options.new_mac, current_mac)
+        else:
+            print("Nevermind. Exiting...")
+            sys.exit()
